@@ -1,5 +1,5 @@
 // vim: tabstop=8 softtabstop=8 shiftwidth=8 noexpandtab
-// let g:syntastic_c_compiler_options=" -I libopencm3/include -DSTM32F1"
+// let g:syntastic_c_compiler_options=" -I libopencm3/include -DSTM32F1 -Wall"
 /*
  * This file is part of the libopencm3 project.
  *
@@ -23,7 +23,6 @@
 #include <libopencm3/cm3/nvic.h>
 #include <libopencm3/cm3/systick.h>
 #include <libopencm3/stm32/rcc.h>
-#include <libopencm3/stm32/gpio.h>
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/cdc.h>
 #include <string.h>
@@ -190,6 +189,7 @@ static void send_chunked_blocking(char *buf, int len, usbd_device *dev, int endp
 }
 
 extern char *process_serial_command(char *buf, int len);
+extern sized_buf serial_write();
 
 static void usbuart_usb_out_cb(usbd_device *dev, uint8_t ep)
 {
@@ -201,29 +201,20 @@ static void usbuart_usb_out_cb(usbd_device *dev, uint8_t ep)
 	char reply_buf[2*CDCACM_PACKET_SIZE];
 	int j = 0;
 	for(int i = 0; i < len; i++) {
-		gpio_toggle(GPIOC, GPIO13);
-
 		// Echo back what was typed
 		// Enter sends a CR, but an LF is needed to advance to next line
 		if (buf[i] == '\r') reply_buf[j++] = '\n';
 		reply_buf[j++] = buf[i];
 	}
 
-	send_chunked_blocking(reply_buf, 0, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
+	send_chunked_blocking(reply_buf, j, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
 }
 
 static void usbuart_usb_in_cb(usbd_device *dev, uint8_t ep)
 {
 	(void) ep;
-#define TIMER_MAX 10000
-	static int timer = TIMER_MAX;
-	if (timer < 0) {
-		send_chunked_blocking("Hello, world!\n\r", 15, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
-		timer = TIMER_MAX;
-	} else {
-		send_chunked_blocking("", 0, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
-		timer = timer-1;
-	}
+	sized_buf buf = serial_write();
+	send_chunked_blocking(buf.ptr, buf.len, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
 }
 
 void cdcacm_set_config(usbd_device *dev, uint16_t wValue)

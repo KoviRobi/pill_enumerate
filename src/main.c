@@ -1,5 +1,5 @@
 // vim: tabstop=4 softtabstop=4 shiftwidth=4 noexpandtab
-// let g:syntastic_c_compiler_options=" -I libopencm3/include -DSTM32F1"
+// let g:syntastic_c_compiler_options=" -I libopencm3/include -DSTM32F1 -Wall"
 /*
  * This file is part of the libopencm3 project.
  *
@@ -28,20 +28,27 @@
 #include <libopencm3/usb/usbd.h>
 #include <libopencm3/usb/cdc.h>
 
+#include "pins.h"
 #include "cdcacm.h"
 
+// Set TRIANGLE if you want only to test if two pins are connected in one
+// direction (0->1..*, 1->2..*, 2->3..* etc, hence triangle)
+//#define TRIANGLE
+// otherwise we will probe both ways, useful for diodes
+//
 // in/out scan pins
 //   25   26   27   28   29   30   31   32   33   38   39   40   41
 // PB10 PB13 PB14 PB15  PA8  PA9 PA10 PA11 PA12 PA15  PB3  PB4  PB5
 #define gpio_scan_pins_num (sizeof(gpio_scan_pins)/sizeof(gpio_scan_pins[0]))
 const int gpio_scan_pins[][2] = {
-	{ GPIOB, GPIO10 }, { GPIOB, GPIO13 }, { GPIOB, GPIO14 },
-	{ GPIOB, GPIO15 }, { GPIOA, GPIO8 },  { GPIOA, GPIO9 },
-	{ GPIOA, GPIO10 }, { GPIOA, GPIO11 }, { GPIOA, GPIO12 },
-	{ GPIOA, GPIO15 }, { GPIOB, GPIO3 },  { GPIOB, GPIO4 },
-	{ GPIOB, GPIO5 }
+	PB12, PB13, PB14, PB15, PA8,  PA9,
+	PA10, PB3,  PB5,  PB6,  PB7,  PB8,
+	PB9
+	/*PA11, PA12,*/
+	/*PA15, PB4*/
 };
 int pin_matrix[gpio_scan_pins_num][gpio_scan_pins_num];
+int pin_matrix_prev[gpio_scan_pins_num][gpio_scan_pins_num];
 
 static usbd_device *usbd_dev;
 
@@ -94,36 +101,93 @@ static const char *usb_strings[] = {
 
 void sys_tick_handler(void)
 {
-	const int* prev_pin = NULL;
-	for (unsigned int pin_id = 0;
-			pin_id < gpio_scan_pins_num;
-			++pin_id) {
-		const int* pin = gpio_scan_pins[pin_id];
+	int any_set = false;
+	//if (gpio_get(GPIOB, GPIO12) & GPIO12) gpio_clear(GPIOC, GPIO13);
+	//else gpio_set(GPIOC, GPIO13);
+	//
+	const int* prev_out = NULL;
+	for (unsigned int out_id = 0;
+			out_id < gpio_scan_pins_num;
+			++out_id) {
+		const int* out = gpio_scan_pins[out_id];
 
 		// Set current pin to output (high), previous pin to input (pull down)
-		if (prev_pin != NULL) {
-			gpio_set_mode(prev_pin[0],
+		if (prev_out != NULL) {
+			gpio_set_mode(prev_out[0],
 					GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN,
-					prev_pin[1]);
-			gpio_clear(prev_pin[0], prev_pin[1]);
+					prev_out[1]);
+			gpio_clear(prev_out[0], prev_out[1]);
 		}
-		gpio_set_mode(pin[0],
-				GPIO_MODE_OUTPUT_2_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
-				pin[1]);
-		gpio_set(pin[0], pin[1]);
+		prev_out = out;
+
+		gpio_set_mode(out[0],
+				GPIO_MODE_OUTPUT_10_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
+				out[1]);
+		gpio_set(out[0], out[1]);
 
 		// Scan all the other pins
-		for (unsigned int other_pin_id = 0;
-				other_pin_id < gpio_scan_pins_num;
-				++other_pin_id) {
-			const int* other_pin = gpio_scan_pins[other_pin_id];
-			if (other_pin == pin) continue; // for other pins
-			pin_matrix[pin_id][other_pin_id] = gpio_get(other_pin[0], other_pin[1]);
+#ifdef TRIANGLE
+		for (unsigned int in_id = out_id+1; // to avoid 0->1 and 1->0
+				in_id < gpio_scan_pins_num;
+				++in_id) {
+#else
+		for (unsigned int in_id = 0;
+				in_id < gpio_scan_pins_num;
+				++in_id) {
+			if (in_id == out_id) continue;
+#endif
+			const int* in = gpio_scan_pins[in_id];
+			if (gpio_get(in[0], in[1]) & in[1]) any_set = true;
+			pin_matrix[out_id][in_id] = gpio_get(in[0], in[1]) & in[1];
 		}
 	}
+	if (prev_out != NULL) {
+		gpio_set_mode(prev_out[0],
+				GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN,
+				prev_out[1]);
+		gpio_clear(prev_out[0], prev_out[1]);
+	}
 
+	if (any_set) gpio_clear(GPIOC, GPIO13);
+	else gpio_set(GPIOC, GPIO13);
 }
 
+static int int_to_buf(int i, char* buf, int maxlen) {
+     int written = 0;
+     do {
+             if (written > maxlen) break;
+             buf[written++] = (i%10) + '0';
+             i /= 10;
+
+     } while (i > 0);
+     // Reverse digits
+     for (int j = 0; j < written; ++j) {
+             buf[j] = buf[written-j-1];
+     }
+     return written;
+}
+
+sized_buf serial_write() {
+
+	static char bufptr[gpio_scan_pins_num*gpio_scan_pins_num*12];
+	sized_buf buf = { bufptr, 0 };
+
+	for (unsigned int i = 0; i < gpio_scan_pins_num; ++i)
+		for (unsigned int j = 0; j < gpio_scan_pins_num; ++j) {
+			int cur = pin_matrix[i][j];
+			int prev = pin_matrix_prev[i][j];
+			if (cur != prev) {
+				buf.len += int_to_buf(i, &buf.ptr[buf.len], 4);
+				buf.ptr[buf.len++] = '-';
+				buf.ptr[buf.len++] = cur?'>':'x';
+				buf.len += int_to_buf(j, &buf.ptr[buf.len], 4);
+				buf.ptr[buf.len++] = '\r';
+				buf.ptr[buf.len++] = '\n';
+				pin_matrix_prev[i][j] = pin_matrix[i][j];
+			}
+		}
+	return buf;
+}
 
 static void usb_set_config(usbd_device *dev, uint16_t wValue)
 {
@@ -133,6 +197,8 @@ static void usb_set_config(usbd_device *dev, uint16_t wValue)
 
 static void setup_clock(void) {
 	rcc_clock_setup_in_hsi_out_48mhz();
+	rcc_periph_clock_enable(RCC_GPIOA);
+	rcc_periph_clock_enable(RCC_GPIOB);
 	rcc_periph_clock_enable(RCC_GPIOC);
 
 	systick_set_clocksource(STK_CSR_CLKSOURCE_AHB_DIV8);
@@ -177,9 +243,6 @@ int main(void)
 			usbd_control_buffer, sizeof(usbd_control_buffer));
 	usbd_register_set_config_callback(usbd_dev, usb_set_config);
 
-	for (unsigned int i = 0; i < gpio_scan_pins_num; ++i)
-		for (unsigned int j = 0; j < gpio_scan_pins_num; ++j)
-			pin_matrix[i][j] = 0;
 	while (1)
 		usbd_poll(usbd_dev);
 }

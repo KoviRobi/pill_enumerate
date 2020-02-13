@@ -7,3 +7,5 @@ extern const struct usb_interface_descriptor uart_data_iface[];
 extern const struct usb_iface_assoc_descriptor uart_assoc;
 
 void cdcacm_set_config(usbd_device *dev, uint16_t wValue);
+
+typedef struct { char* ptr; int len; } sized_buf;
