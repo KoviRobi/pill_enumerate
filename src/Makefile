@@ -12,9 +12,6 @@ LDFLAGS += $(OPT_FLAGS)
 
 SRC =			\
 	cdcacm.c	\
-	hid.c		\
-	hex_utils.c	\
-	flash.c		\
 	main.c		\
 
 CROSS_COMPILE ?= arm-none-eabi-
@@ -34,14 +31,14 @@ LDFLAGS = $(LDFLAGS_BOOT)
 
 LDFLAGS += --specs=nosys.specs
 
-all:	pill_duck.bin
+all:	pill_enumerate.bin
 
 host_clean:
-	-$(Q)$(RM) pill_duck.bin
+	-$(Q)$(RM) pill_enumerate.bin
 
 OBJ = $(SRC:.c=.o)
 
-pill_duck.elf: version.h $(OBJ)
+pill_enumerate.elf: version.h $(OBJ)
 	@echo "  LD      $@"
 	$(Q)$(CC) -o $@ $(OBJ) $(LDFLAGS)
 

@@ -7,3 +7,5 @@
 *.elf
 src/version.h
 src/mapfile
+
+.direnv

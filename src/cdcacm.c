@@ -1,4 +1,5 @@
 // vim: tabstop=8 softtabstop=8 shiftwidth=8 noexpandtab
+// let g:syntastic_c_compiler_options=" -I libopencm3/include -DSTM32F1"
 /*
  * This file is part of the libopencm3 project.
  *
@@ -28,10 +29,9 @@
 #include <string.h>
 
 #include "cdcacm.h"
-#include "version.h"
 
 /* Serial ACM interface */
-#define CDCACM_PACKET_SIZE 	128
+#define CDCACM_PACKET_SIZE 	64
 #define CDCACM_UART_ENDPOINT	0x03
 #define CDCACM_INTR_ENDPOINT	0x84
 
@@ -78,7 +78,7 @@ static const struct {
 		.bDescriptorType = CS_INTERFACE,
 		.bDescriptorSubtype = USB_CDC_TYPE_CALL_MANAGEMENT,
 		.bmCapabilities = 0,
-		.bDataInterface = 2,
+		.bDataInterface = 1,
 	},
 	.acm = {
 		.bFunctionLength = sizeof(struct usb_cdc_acm_descriptor),
@@ -90,15 +90,15 @@ static const struct {
 		.bFunctionLength = sizeof(struct usb_cdc_union_descriptor),
 		.bDescriptorType = CS_INTERFACE,
 		.bDescriptorSubtype = USB_CDC_TYPE_UNION,
-		.bControlInterface = 1,
-		.bSubordinateInterface0 = 2,
+		.bControlInterface = 0,
+		.bSubordinateInterface0 = 1,
 	 }
 };
 
 const struct usb_interface_descriptor uart_comm_iface[] = {{
 	.bLength = USB_DT_INTERFACE_SIZE,
 	.bDescriptorType = USB_DT_INTERFACE,
-	.bInterfaceNumber = 1,
+	.bInterfaceNumber = 0,
 	.bAlternateSetting = 0,
 	.bNumEndpoints = 1,
 	.bInterfaceClass = USB_CLASS_CDC,
@@ -115,7 +115,7 @@ const struct usb_interface_descriptor uart_comm_iface[] = {{
 const struct usb_interface_descriptor uart_data_iface[] = {{
 	.bLength = USB_DT_INTERFACE_SIZE,
 	.bDescriptorType = USB_DT_INTERFACE,
-	.bInterfaceNumber = 2,
+	.bInterfaceNumber = 1,
 	.bAlternateSetting = 0,
 	.bNumEndpoints = 2,
 	.bInterfaceClass = USB_CLASS_DATA,
@@ -196,15 +196,9 @@ static void usbuart_usb_out_cb(usbd_device *dev, uint8_t ep)
 	(void)ep;
 
 	char buf[CDCACM_PACKET_SIZE];
-	char reply_buf[256];
-
-	static char typing_buf[2048] = {0};
-	static int typing_index = 0;
-
 	int len = usbd_ep_read_packet(dev, CDCACM_UART_ENDPOINT,
-					buf, CDCACM_PACKET_SIZE);
-
-
+			buf, CDCACM_PACKET_SIZE);
+	char reply_buf[2*CDCACM_PACKET_SIZE];
 	int j = 0;
 	for(int i = 0; i < len; i++) {
 		gpio_toggle(GPIOC, GPIO13);
@@ -213,36 +207,23 @@ static void usbuart_usb_out_cb(usbd_device *dev, uint8_t ep)
 		// Enter sends a CR, but an LF is needed to advance to next line
 		if (buf[i] == '\r') reply_buf[j++] = '\n';
 		reply_buf[j++] = buf[i];
-
-		typing_buf[typing_index++] = buf[i];
-
-		if (buf[i] == '\r' || buf[i] == '\n') {
-			char *response = process_serial_command(typing_buf, typing_index);
-			typing_index = 0;
-
-			for (size_t k = 0; k < strlen(response); ++k) {
-				reply_buf[j++] = response[k];
-			}
-
-			// prompt
-			reply_buf[j++] = '\r';
-			reply_buf[j++] = '\n';
-			reply_buf[j++] = 'd';
-			reply_buf[j++] = 'u';
-			reply_buf[j++] = 'c';
-			reply_buf[j++] = 'k';
-			reply_buf[j++] = '>';
-			reply_buf[j++] = ' ';
-		}
 	}
 
-	send_chunked_blocking(reply_buf, j, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
+	send_chunked_blocking(reply_buf, 0, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
 }
 
 static void usbuart_usb_in_cb(usbd_device *dev, uint8_t ep)
 {
-	(void) dev;
 	(void) ep;
+#define TIMER_MAX 10000
+	static int timer = TIMER_MAX;
+	if (timer < 0) {
+		send_chunked_blocking("Hello, world!\n\r", 15, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
+		timer = TIMER_MAX;
+	} else {
+		send_chunked_blocking("", 0, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
+		timer = timer-1;
+	}
 }
 
 void cdcacm_set_config(usbd_device *dev, uint16_t wValue)
