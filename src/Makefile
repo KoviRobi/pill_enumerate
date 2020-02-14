@@ -31,7 +31,7 @@ LDFLAGS = $(LDFLAGS_BOOT)
 
 LDFLAGS += --specs=nosys.specs
 
-all:	pill_enumerate.bin
+all:	pill_enumerate.bin pill_enumerate.hex
 
 host_clean:
 	-$(Q)$(RM) pill_enumerate.bin
@@ -50,7 +50,7 @@ pill_enumerate.elf: version.h $(OBJ)
 	@echo "  OBJCOPY $@"
 	$(Q)$(OBJCOPY) -O binary $^ $@
 
-%.hex:	%
+%.hex:	%.elf
 	@echo "  OBJCOPY $@"
 	$(Q)$(OBJCOPY) -O ihex $^ $@
 

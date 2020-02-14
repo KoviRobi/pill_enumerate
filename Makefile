@@ -19,5 +19,8 @@ clean:
 	$(Q)$(MAKE) $(MFLAGS) -C libopencm3 $@
 	$(Q)$(MAKE) $(MFLAGS) -C src $@
 
-program: src/pill_enumerate.bin
-	sudo st-flash write $< 0x08000000
+program: src/pill_enumerate.hex
+	# Waiting for STLink programmer
+	while ! grep 'STM32 STLink' /sys/bus/usb/devices/*/product; do sleep 1s; done
+	# Programming
+	sudo st-flash --format ihex write $<
