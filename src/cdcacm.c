@@ -31,7 +31,8 @@
 
 /* Serial ACM interface */
 #define CDCACM_PACKET_SIZE 	64
-#define CDCACM_UART_ENDPOINT	0x03
+#define CDCACM_UART_ENDP_OUT	0x03
+#define CDCACM_UART_ENDP_IN	0x83
 #define CDCACM_INTR_ENDPOINT	0x84
 
 static const struct usb_endpoint_descriptor uart_comm_endp[] = {{
@@ -46,14 +47,14 @@ static const struct usb_endpoint_descriptor uart_comm_endp[] = {{
 static const struct usb_endpoint_descriptor uart_data_endp[] = {{
 	.bLength = USB_DT_ENDPOINT_SIZE,
 	.bDescriptorType = USB_DT_ENDPOINT,
-	.bEndpointAddress = CDCACM_UART_ENDPOINT,
+	.bEndpointAddress = CDCACM_UART_ENDP_OUT,
 	.bmAttributes = USB_ENDPOINT_ATTR_BULK,
 	.wMaxPacketSize = CDCACM_PACKET_SIZE,
 	.bInterval = 1,
 }, {
 	.bLength = USB_DT_ENDPOINT_SIZE,
 	.bDescriptorType = USB_DT_ENDPOINT,
-	.bEndpointAddress = 0x80 | CDCACM_UART_ENDPOINT,
+	.bEndpointAddress = CDCACM_UART_ENDP_IN,
 	.bmAttributes = USB_ENDPOINT_ATTR_BULK,
 	.wMaxPacketSize = CDCACM_PACKET_SIZE,
 	.bInterval = 1,
@@ -196,7 +197,7 @@ static void usbuart_usb_out_cb(usbd_device *dev, uint8_t ep)
 	(void)ep;
 
 	char buf[CDCACM_PACKET_SIZE];
-	int len = usbd_ep_read_packet(dev, CDCACM_UART_ENDPOINT,
+	int len = usbd_ep_read_packet(dev, CDCACM_UART_ENDP_OUT,
 			buf, CDCACM_PACKET_SIZE);
 	char reply_buf[2*CDCACM_PACKET_SIZE];
 	int j = 0;
@@ -207,14 +208,14 @@ static void usbuart_usb_out_cb(usbd_device *dev, uint8_t ep)
 		reply_buf[j++] = buf[i];
 	}
 
-	send_chunked_blocking(reply_buf, j, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
+	send_chunked_blocking(reply_buf, j, dev, CDCACM_UART_ENDP_OUT, CDCACM_PACKET_SIZE);
 }
 
 static void usbuart_usb_in_cb(usbd_device *dev, uint8_t ep)
 {
 	(void) ep;
 	sized_buf buf = serial_write();
-	send_chunked_blocking(buf.ptr, buf.len, dev, CDCACM_UART_ENDPOINT, CDCACM_PACKET_SIZE);
+	send_chunked_blocking(buf.ptr, buf.len, dev, CDCACM_UART_ENDP_IN, CDCACM_PACKET_SIZE);
 }
 
 void cdcacm_set_config(usbd_device *dev, uint16_t wValue)
@@ -222,9 +223,9 @@ void cdcacm_set_config(usbd_device *dev, uint16_t wValue)
 	(void) wValue;
 
 	/* Serial interface */
-	usbd_ep_setup(dev, CDCACM_UART_ENDPOINT, USB_ENDPOINT_ATTR_BULK,
+	usbd_ep_setup(dev, CDCACM_UART_ENDP_OUT, USB_ENDPOINT_ATTR_BULK,
 	              CDCACM_PACKET_SIZE, usbuart_usb_out_cb);
-	usbd_ep_setup(dev, 0x80 | CDCACM_UART_ENDPOINT, USB_ENDPOINT_ATTR_BULK,
+	usbd_ep_setup(dev, CDCACM_UART_ENDP_IN, USB_ENDPOINT_ATTR_BULK,
 	              CDCACM_PACKET_SIZE, usbuart_usb_in_cb);
 	usbd_ep_setup(dev, CDCACM_INTR_ENDPOINT, USB_ENDPOINT_ATTR_INTERRUPT, 16, NULL);
 
