@@ -47,8 +47,10 @@ const int gpio_scan_pins[][2] = {
 	/*PA11, PA12,*/
 	/*PA15, PB4*/
 };
-int pin_matrix[gpio_scan_pins_num][gpio_scan_pins_num];
-int pin_matrix_prev[gpio_scan_pins_num][gpio_scan_pins_num];
+uint8_t pin_matrix_prev[gpio_scan_pins_num][gpio_scan_pins_num];
+// Text buffer
+char bufptr[1024] = {0};
+size_t buflen = 0;
 
 static usbd_device *usbd_dev;
 
@@ -99,12 +101,25 @@ static const char *usb_strings[] = {
 	"Pin Enumerator UART Port",
 };
 
+static int int_to_buf(int i, char* buf, int maxlen) {
+     int written = 0;
+     do {
+             if (written > maxlen) break;
+             buf[written++] = (i%10) + '0';
+             i /= 10;
+
+     } while (i > 0);
+     // Reverse digits
+     for (int j = 0; j < written; ++j) {
+             buf[j] = buf[written-j-1];
+     }
+     return written;
+}
+
 void sys_tick_handler(void)
 {
 	int any_set = false;
-	//if (gpio_get(GPIOB, GPIO12) & GPIO12) gpio_clear(GPIOC, GPIO13);
-	//else gpio_set(GPIOC, GPIO13);
-	//
+
 	const int* prev_out = NULL;
 	for (unsigned int out_id = 0;
 			out_id < gpio_scan_pins_num;
@@ -138,7 +153,18 @@ void sys_tick_handler(void)
 #endif
 			const int* in = gpio_scan_pins[in_id];
 			if (gpio_get(in[0], in[1]) & in[1]) any_set = true;
-			pin_matrix[out_id][in_id] = gpio_get(in[0], in[1]) & in[1];
+
+			uint8_t cur = (gpio_get(in[0], in[1]) & in[1]) != 0;
+			if ((cur != pin_matrix_prev[out_id][in_id]) &&
+					(buflen + 12 < sizeof(bufptr))) {
+				buflen += int_to_buf(in_id, &bufptr[buflen], 4);
+				bufptr[buflen++] = '-';
+				bufptr[buflen++] = cur?'>':'x';
+				buflen += int_to_buf(out_id, &bufptr[buflen], 4);
+				bufptr[buflen++] = '\r';
+				bufptr[buflen++] = '\n';
+				pin_matrix_prev[out_id][in_id] = cur;
+			}
 		}
 	}
 	if (prev_out != NULL) {
@@ -152,40 +178,15 @@ void sys_tick_handler(void)
 	else gpio_set(GPIOC, GPIO13);
 }
 
-static int int_to_buf(int i, char* buf, int maxlen) {
-     int written = 0;
-     do {
-             if (written > maxlen) break;
-             buf[written++] = (i%10) + '0';
-             i /= 10;
-
-     } while (i > 0);
-     // Reverse digits
-     for (int j = 0; j < written; ++j) {
-             buf[j] = buf[written-j-1];
-     }
-     return written;
+char *process_serial_command(char *buf, int len) {
+	(void) buf;
+	(void) len;
+	return "";
 }
 
 sized_buf serial_write() {
-
-	static char bufptr[gpio_scan_pins_num*gpio_scan_pins_num*12];
-	sized_buf buf = { bufptr, 0 };
-
-	for (unsigned int i = 0; i < gpio_scan_pins_num; ++i)
-		for (unsigned int j = 0; j < gpio_scan_pins_num; ++j) {
-			int cur = pin_matrix[i][j];
-			int prev = pin_matrix_prev[i][j];
-			if (cur != prev) {
-				buf.len += int_to_buf(i, &buf.ptr[buf.len], 4);
-				buf.ptr[buf.len++] = '-';
-				buf.ptr[buf.len++] = cur?'>':'x';
-				buf.len += int_to_buf(j, &buf.ptr[buf.len], 4);
-				buf.ptr[buf.len++] = '\r';
-				buf.ptr[buf.len++] = '\n';
-				pin_matrix_prev[i][j] = pin_matrix[i][j];
-			}
-		}
+	sized_buf buf = { bufptr, buflen };
+	buflen = 0;
 	return buf;
 }
 
