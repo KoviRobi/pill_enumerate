@@ -31,9 +31,9 @@
 
 /* Serial ACM interface */
 #define CDCACM_PACKET_SIZE 	64
-#define CDCACM_UART_ENDP_OUT	0x03
-#define CDCACM_UART_ENDP_IN	0x83
-#define CDCACM_INTR_ENDPOINT	0x84
+#define CDCACM_UART_ENDP_OUT	0x01
+#define CDCACM_UART_ENDP_IN	0x81
+#define CDCACM_INTR_ENDPOINT	0x82
 
 static const struct usb_endpoint_descriptor uart_comm_endp[] = {{
 	.bLength = USB_DT_ENDPOINT_SIZE,
@@ -78,7 +78,7 @@ static const struct {
 		.bDescriptorType = CS_INTERFACE,
 		.bDescriptorSubtype = USB_CDC_TYPE_CALL_MANAGEMENT,
 		.bmCapabilities = 0,
-		.bDataInterface = 2,
+		.bDataInterface = 1,
 	},
 	.acm = {
 		.bFunctionLength = sizeof(struct usb_cdc_acm_descriptor),
@@ -90,21 +90,21 @@ static const struct {
 		.bFunctionLength = sizeof(struct usb_cdc_union_descriptor),
 		.bDescriptorType = CS_INTERFACE,
 		.bDescriptorSubtype = USB_CDC_TYPE_UNION,
-		.bControlInterface = 1,
-		.bSubordinateInterface0 = 2,
+		.bControlInterface = 0,
+		.bSubordinateInterface0 = 1,
 	 }
 };
 
 const struct usb_interface_descriptor uart_comm_iface[] = {{
 	.bLength = USB_DT_INTERFACE_SIZE,
 	.bDescriptorType = USB_DT_INTERFACE,
-	.bInterfaceNumber = 1,
+	.bInterfaceNumber = 0,
 	.bAlternateSetting = 0,
 	.bNumEndpoints = 1,
 	.bInterfaceClass = USB_CLASS_CDC,
 	.bInterfaceSubClass = USB_CDC_SUBCLASS_ACM,
 	.bInterfaceProtocol = USB_CDC_PROTOCOL_AT,
-	.iInterface = 4,
+	.iInterface = 4, /* Pin Enumerator UART Port */
 
 	.endpoint = uart_comm_endp,
 
@@ -115,7 +115,7 @@ const struct usb_interface_descriptor uart_comm_iface[] = {{
 const struct usb_interface_descriptor uart_data_iface[] = {{
 	.bLength = USB_DT_INTERFACE_SIZE,
 	.bDescriptorType = USB_DT_INTERFACE,
-	.bInterfaceNumber = 2,
+	.bInterfaceNumber = 1,
 	.bAlternateSetting = 0,
 	.bNumEndpoints = 2,
 	.bInterfaceClass = USB_CLASS_DATA,
@@ -129,7 +129,7 @@ const struct usb_interface_descriptor uart_data_iface[] = {{
 const struct usb_iface_assoc_descriptor uart_assoc = {
 	.bLength = USB_DT_INTERFACE_ASSOCIATION_SIZE,
 	.bDescriptorType = USB_DT_INTERFACE_ASSOCIATION,
-	.bFirstInterface = 1,
+	.bFirstInterface = 0,
 	.bInterfaceCount = 2,
 	.bFunctionClass = USB_CLASS_CDC,
 	.bFunctionSubClass = USB_CDC_SUBCLASS_ACM,
@@ -237,7 +237,7 @@ void cdcacm_set_config(usbd_device *dev, uint16_t wValue)
 	/* Notify the host that DCD is asserted.
 	 * Allows the use of /dev/tty* devices on *BSD/MacOS
 	 */
-	cdcacm_set_modem_state(dev, 2, true, true);
+	cdcacm_set_modem_state(dev, 0, true, true);
 }
 
 
