@@ -44,8 +44,8 @@ const int gpio_scan_pins[][2] = {
 	PB12, PB13, PB14, PB15, PA8,  PA9,
 	PA10, PB3,  PB5,  PB6,  PB7,  PB8,
 	PB9
-	/*PA11, PA12,*/
-	/*PA15, PB4*/
+	//,PA11, PA12 /* USB */
+	//,PA15, PB3, PB4  /*  JTDI, JTDO, JTRST */
 };
 uint8_t pin_matrix_prev[gpio_scan_pins_num][gpio_scan_pins_num];
 // Text buffer
@@ -203,6 +203,7 @@ static void setup_clock(void) {
 	rcc_periph_clock_enable(RCC_GPIOA);
 	rcc_periph_clock_enable(RCC_GPIOB);
 	rcc_periph_clock_enable(RCC_GPIOC);
+	rcc_periph_clock_enable(RCC_AFIO); // For disabling JTAG
 
 	systick_set_clocksource(STK_CSR_CLKSOURCE_AHB_DIV8);
 	/* SysTick interrupt every N clock pulses: set reload to N-1
@@ -220,6 +221,9 @@ static void setup_gpio(void) {
 	gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ,
 			GPIO_CNF_OUTPUT_PUSHPULL, GPIO13);
 	gpio_set(GPIOC, GPIO13);
+
+	// Disable JTAG
+	gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_OFF, 0);
 
 	// Set all the pins to input
 	for (unsigned int pin_id = 0;
