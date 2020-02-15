@@ -110,8 +110,10 @@ static int int_to_buf(int i, char* buf, int maxlen) {
 
      } while (i > 0);
      // Reverse digits
-     for (int j = 0; j < written; ++j) {
-             buf[j] = buf[written-j-1];
+     for (int j = 0; j < written/2; ++j) {
+		 int tmp = buf[j];
+		 buf[j] = buf[written-j-1];
+		 buf[written-j-1] = tmp;
      }
      return written;
 }
