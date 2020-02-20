@@ -1,3 +1,4 @@
+# Options: CFLAGS=-DTRIANGLE and CFLAGS=-DPIN_NAMES
 ifneq ($(V), 1)
 MAKEFLAGS += --no-print-dir
 Q := @

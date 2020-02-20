@@ -19,6 +19,10 @@
  * along with this library.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+// This file continuously scans each pin as output, and for it tests every
+// other pin as input
+// Options: TRIANGLE, and PIN_NAMES
+
 #include <stdlib.h>
 #include <string.h>
 #include <libopencm3/cm3/nvic.h>
@@ -41,13 +45,22 @@
 // PB10 PB13 PB14 PB15  PA8  PA9 PA10 PA11 PA12 PA15  PB3  PB4  PB5
 #define gpio_scan_pins_num (sizeof(gpio_scan_pins)/sizeof(gpio_scan_pins[0]))
 const int gpio_scan_pins[][2] = {
-	PB12, PB13, PB14, PB15, PA8,  PA9,
-	PA10, PB3,  PB5,  PB6,  PB7,  PB8,
-	PB9
-	//,PA11, PA12 /* USB */
-	//,PA15, PB3, PB4  /*  JTDI, JTDO, JTRST */
-};
+PA1,  PA2,  PA3,  PA4,  PA5, PA6, PA7,  PB0, PB1, PB10, PB11,
+PB12, PB13, PB14, PB15, PA8, PA9, PA10, PB6, PB7 };
+//	PB12, PB13, PB14, PB15, PA8,
+//	PA9,  PA10,
+//	//PA11, PA12, /* USB */
+//	PA15, PB3, PB4,  /*  JTDI, JTDO, JTRST */
+//	PB5,  PB6,  PB7,  PB8,
+//	PB9
+//};
 uint8_t pin_matrix_prev[gpio_scan_pins_num][gpio_scan_pins_num];
+// Set PIN_NAMES to use names instead of indices into the gpio_scan_pins array
+#ifdef PIN_NAMES
+const char* gpio_scan_pin_names[] = {
+"R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11",
+"C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8", "C9" };
+#endif // PIN_NAMES
 // Text buffer
 char bufptr[1024] = {0};
 size_t buflen = 0;
@@ -101,7 +114,17 @@ static const char *usb_strings[] = {
 	"Pin Enumerator UART Port",
 };
 
-static int int_to_buf(int i, char* buf, int maxlen) {
+#ifdef PIN_NAMES
+int copy_string(const char* src, char* dst, int maxlen) {
+	int copied = 0;
+	while ((*src != '\0') && (copied < maxlen)) {
+		*dst++ = *src++;
+		++copied;
+	}
+	return copied;
+}
+#else
+int int_to_buf(int i, char* buf, int maxlen) {
      int written = 0;
      do {
              if (written > maxlen) break;
@@ -117,6 +140,7 @@ static int int_to_buf(int i, char* buf, int maxlen) {
      }
      return written;
 }
+#endif // PIN_NAMES
 
 void sys_tick_handler(void)
 {
@@ -133,14 +157,14 @@ void sys_tick_handler(void)
 			gpio_set_mode(prev_out[0],
 					GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN,
 					prev_out[1]);
-			gpio_clear(prev_out[0], prev_out[1]);
+			gpio_set(prev_out[0], prev_out[1]);
 		}
 		prev_out = out;
 
 		gpio_set_mode(out[0],
-				GPIO_MODE_OUTPUT_10_MHZ, GPIO_CNF_OUTPUT_PUSHPULL,
+				GPIO_MODE_OUTPUT_10_MHZ, GPIO_CNF_OUTPUT_OPENDRAIN,
 				out[1]);
-		gpio_set(out[0], out[1]);
+		gpio_clear(out[0], out[1]);
 
 		// Scan all the other pins
 #ifdef TRIANGLE
@@ -158,11 +182,19 @@ void sys_tick_handler(void)
 
 			uint8_t cur = (gpio_get(in[0], in[1]) & in[1]) != 0;
 			if ((cur != pin_matrix_prev[out_id][in_id]) &&
-					(buflen + 12 < sizeof(bufptr))) {
-				buflen += int_to_buf(in_id, &bufptr[buflen], 4);
+					(buflen + 16 < sizeof(bufptr))) {
+#ifdef PIN_NAMES
+				buflen += copy_string(gpio_scan_pin_names[in_id], &bufptr[buflen], 6);
+#else
+				buflen += int_to_buf(in_id, &bufptr[buflen], 6);
+#endif
 				bufptr[buflen++] = '-';
 				bufptr[buflen++] = cur?'>':'x';
-				buflen += int_to_buf(out_id, &bufptr[buflen], 4);
+#ifdef PIN_NAMES
+				buflen += copy_string(gpio_scan_pin_names[out_id], &bufptr[buflen], 6);
+#else
+				buflen += int_to_buf(out_id, &bufptr[buflen], 6);
+#endif
 				bufptr[buflen++] = '\r';
 				bufptr[buflen++] = '\n';
 				pin_matrix_prev[out_id][in_id] = cur;
@@ -173,7 +205,7 @@ void sys_tick_handler(void)
 		gpio_set_mode(prev_out[0],
 				GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN,
 				prev_out[1]);
-		gpio_clear(prev_out[0], prev_out[1]);
+		gpio_set(prev_out[0], prev_out[1]);
 	}
 
 	if (any_set) gpio_clear(GPIOC, GPIO13);
@@ -223,7 +255,7 @@ static void setup_gpio(void) {
 	gpio_set(GPIOC, GPIO13);
 
 	// Disable JTAG
-	gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_OFF, 0);
+	gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_ON, 0);
 
 	// Set all the pins to input
 	for (unsigned int pin_id = 0;
@@ -233,7 +265,7 @@ static void setup_gpio(void) {
 		gpio_set_mode(pin[0],
 				GPIO_MODE_INPUT, GPIO_CNF_INPUT_PULL_UPDOWN,
 				pin[1]);
-		gpio_clear(pin[0], pin[1]);
+		gpio_set(pin[0], pin[1]);
 	}
 }
 

@@ -1,6 +1,7 @@
 #ifndef __PINS_H__
 #define __PINS_H__
 
+#define PA0  {GPIOA, GPIO0}
 #define PA1  {GPIOA, GPIO1}
 #define PA2  {GPIOA, GPIO2}
 #define PA3  {GPIOA, GPIO3}
@@ -16,6 +17,7 @@
 #define PA13 {GPIOA,GPIO13}
 #define PA14 {GPIOA,GPIO14}
 #define PA15 {GPIOA,GPIO15}
+#define PB0  {GPIOB, GPIO0}
 #define PB1  {GPIOB, GPIO1}
 #define PB2  {GPIOB, GPIO2}
 #define PB3  {GPIOB, GPIO3}
@@ -31,6 +33,7 @@
 #define PB13 {GPIOB,GPIO13}
 #define PB14 {GPIOB,GPIO14}
 #define PB15 {GPIOB,GPIO15}
+#define PC0  {GPIOC, GPIO0}
 #define PC1  {GPIOC, GPIO1}
 #define PC2  {GPIOC, GPIO2}
 #define PC3  {GPIOC, GPIO3}
